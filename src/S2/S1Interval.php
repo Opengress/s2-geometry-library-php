@@ -501,4 +501,8 @@ class S1Interval
             return new S1Interval($this->lo(), $other->hi(), true);
         }
     }
+
+    public function equals($other): bool {
+        return $other instanceof S1Interval && $this->lo() === $other->lo() && $this->hi() === $other->hi();
+    }
 }
