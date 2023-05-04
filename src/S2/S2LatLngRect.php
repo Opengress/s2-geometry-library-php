@@ -2,6 +2,8 @@
 
 namespace S2;
 
+use Exception\IllegalArgumentException;
+
 class S2LatLngRect implements S2Region
 {
     /** @var R1Interval */
@@ -46,9 +48,9 @@ class S2LatLngRect implements S2Region
     /**
      * The full allowable range of longitudes.
      */
-//  public static S1Interval fullLng() {
-//    return S1Interval.full();
-//  }
+  public static function fullLng(): S1Interval {
+    return S1Interval::full();
+  }
 
     /**
      * Construct a rectangle from a center point (in lat-lng space) and size in
@@ -327,17 +329,18 @@ class S2LatLngRect implements S2Region
      * More efficient version of Contains() that accepts a S2LatLng rather than an
      * S2Point.
      */
-    public function contains($ll)
+    public function contains($other)
     {
-        if ($ll instanceof S2LatLng) {
-            return ($this->lat->contains($ll->lat()->radians()) && $this->lng->contains($ll->lng()->radians()));
-        } else if ($ll instanceof S2LatLngRect) {
-            return $this->lat->contains($ll->lat()) && $this->lng->contains($ll->lng());
-        } else if ($ll instanceof S2Cell) {
-            return $this->contains($ll->getRectBound());
-        } else if ($ll instanceof S2Point) {
-            return contains(new S2LatLng(p));
+        if ($other instanceof S2LatLng) {
+            return ($this->lat->contains($other->lat()->radians()) && $this->lng->contains($other->lng()->radians()));
+        } else if ($other instanceof S2LatLngRect) {
+            return $this->lat->contains($other->lat()) && $this->lng->contains($other->lng());
+        } else if ($other instanceof S2Cell) {
+            return $this->contains($other->getRectBound());
+        } else if ($other instanceof S2Point) {
+            return contains(S2LatLng::fromPoint($other));
         }
+        throw new \Error('not implemented');
     }
 
     /**
@@ -496,9 +499,9 @@ class S2LatLngRect implements S2Region
      * Return the smallest rectangle containing the union of this rectangle and
      * the given rectangle.
      */
-//  public S2LatLngRect union(S2LatLngRect other) {
-//    return new S2LatLngRect(lat.union(other.lat), lng.union(other.lng));
-//  }
+  public function union(S2LatLngRect $other): S2LatLngRect {
+    return new S2LatLngRect($this->lat()->union($other->lat()), $this->lng()->union($other->lng()));
+  }
 
     /**
      * Return the smallest rectangle containing the intersection of this rectangle
@@ -630,6 +633,11 @@ class S2LatLngRect implements S2Region
             }
         }
         return $poleCap;
+    }
+
+    public function getIsPoint() {
+        return ($this->lat()->lo()===$this->lat()->hi() &&
+            $this->lng()->lo()===$this->lng()->hi());
     }
 
     public function getRectBound()

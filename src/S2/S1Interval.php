@@ -310,7 +310,7 @@ class S1Interval
     {
 // assert (radius >= 0);
         if ($this->isEmpty()) {
-            return this;
+            return $this;
         }
 
 // Check whether this interval will be full after expansion, allowing
@@ -470,5 +470,35 @@ class S1Interval
 // We want to ensure that if b == Pi and a == (-Pi + eps),
 // the return result is approximately 2*Pi and not zero.
         return ($b + S2::M_PI) - ($a - S2::M_PI);
+    }
+
+    public function union(S1Interval $other) {
+        if ($other->isEmpty()) {
+            return $this;
+        }
+        if ($this->fastContains($other->lo())) {
+            if ($this->fastContains($other->hi())) {
+                if ($this->contains($other)) {
+                    return $this;
+                }
+                return S1Interval::full();
+            }
+            return new S1Interval($this->lo(), $other->hi(), checked: true);
+        }
+        if ($this->fastContains($other->hi())) {
+            return new S1Interval($other->lo(), $this->hi(), checked: true);
+        }
+
+        if ($this->isEmpty() || $other->fastContains($this->lo())) {
+            return $other;
+        }
+
+        $dlo = S1Interval::positiveDistance($other->hi(), $this->lo());
+        $dhi = S1Interval::positiveDistance($this->hi(), $other->lo());
+        if ($dlo < $dhi) {
+            return new S1Interval($other->lo(), $this->hi(), true);
+        } else {
+            return new S1Interval($this->lo(), $other->hi(), true);
+        }
     }
 }
