@@ -144,7 +144,10 @@ class S2LatLngRect implements S2Region {
     }
 
     public function equals($other): bool {
-        return $other instanceof S2LatLngRect && $this->lat()->equals($other->lat() && $this->lng()->equals($other->lng()));
+        return
+                $other instanceof S2LatLngRect
+                && $this->lat()->equals($other->lat())
+                && $this->lng()->equals($other->lng());
     }
 
     public function lng() {
