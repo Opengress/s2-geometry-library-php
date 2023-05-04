@@ -2,8 +2,7 @@
 
 namespace S2;
 
-class S1Interval
-{
+class S1Interval {
     private $lo;
     private $hi;
 
@@ -11,8 +10,7 @@ class S1Interval
      * Both endpoints must be in the range -Pi to Pi inclusive. The value -Pi is
      * converted internally to Pi except for the Full() and Empty() intervals.
      */
-    public function __construct($lo, $hi = null, $checked = false)
-    {
+    public function __construct($lo, $hi = null, $checked = false) {
         if ($lo instanceof S1Interval) {
             $this->lo = $lo->lo;
             $this->hi = $lo->hi;
@@ -20,10 +18,10 @@ class S1Interval
             $newLo = $lo;
             $newHi = $hi;
             if (!$checked) {
-                if ($lo == -S2::M_PI && $hi != S2::M_PI) {
+                if ($lo==-S2::M_PI && $hi!=S2::M_PI) {
                     $newLo = S2::M_PI;
                 }
-                if ($hi == -S2::M_PI && $lo != S2::M_PI) {
+                if ($hi==-S2::M_PI && $lo!=S2::M_PI) {
                     $newHi = S2::M_PI;
                 }
             }
@@ -32,36 +30,25 @@ class S1Interval
         }
     }
 
-    public static function emptya()
-    {
+    public static function emptya() {
         return new S1Interval(S2::M_PI, -S2::M_PI, true);
     }
 
-    public static function full()
-    {
+    public static function full() {
         return new S1Interval(-S2::M_PI, S2::M_PI, true);
     }
 
-    /** Convenience method to construct an interval containing a single point. *#/
-     * public static S1Interval fromPoint(double p) {
-     * if (p == -S2.M_PI) {
-     * p = S2.M_PI;
-     * }
-     * return new S1Interval(p, p, true);
-     * }
-     *
-     * /**
+    /**
      * Convenience method to construct the minimal interval containing the two
      * given points. This is equivalent to starting with an empty interval and
      * calling AddPoint() twice, but it is more efficient.
      */
-    public static function fromPointPair($p1, $p2)
-    {
+    public static function fromPointPair($p1, $p2) {
 // assert (Math.abs(p1) <= S2.M_PI && Math.abs(p2) <= S2.M_PI);
-        if ($p1 == -S2::M_PI) {
+        if ($p1==-S2::M_PI) {
             $p1 = S2::M_PI;
         }
-        if ($p2 == -S2::M_PI) {
+        if ($p2==-S2::M_PI) {
             $p2 = S2::M_PI;
         }
         if (self::positiveDistance($p1, $p2) <= S2::M_PI) {
@@ -71,40 +58,27 @@ class S1Interval
         }
     }
 
-    public function lo()
-    {
+    public function lo() {
         return $this->lo;
     }
 
-    public function hi()
-    {
+    public function hi() {
         return $this->hi;
     }
 
-    /**
-     * An interval is valid if neither bound exceeds Pi in absolute value, and the
-     * value -Pi appears only in the Empty() and Full() intervals.
-     *#/
-     * public boolean isValid() {
-     * return (Math.abs(lo()) <= S2.M_PI && Math.abs(hi()) <= S2.M_PI
-     * && !(lo() == -S2.M_PI && hi() != S2.M_PI) && !(hi() == -S2.M_PI && lo() != S2.M_PI));
-     * }
-     *
-     * /** Return true if the interval contains all points on the unit circle. *#/
+    /** Return true if the interval contains all points on the unit circle. *#/
      * public boolean isFull() {
      * return hi() - lo() == 2 * S2.M_PI;
      * }
      *
      *
      * /** Return true if the interval is empty, i.e. it contains no points. */
-    public function isEmpty()
-    {
-        return $this->lo() - $this->hi() == 2 * S2::M_PI;
+    public function isEmpty() {
+        return $this->lo() - $this->hi()==2 * S2::M_PI;
     }
 
     /* Return true if lo() > hi(). (This is true for empty intervals.) */
-    public function isInverted()
-    {
+    public function isInverted() {
         return $this->lo() > $this->hi();
     }
 
@@ -112,86 +86,68 @@ class S1Interval
      * Return the midpoint of the interval. For full and empty intervals, the
      * result is arbitrary.
      */
-    public function getCenter()
-    {
+    public function getCenter() {
         $center = 0.5 * ($this->lo() + $this->hi());
         if (!$this->isInverted()) {
             return $center;
         }
 // Return the center in the range (-Pi, Pi].
-        return ($center <= 0) ? ($center + S2::M_PI) : ($center - S2::M_PI);
+        return ($center <= 0) ? ($center + S2::M_PI):($center - S2::M_PI);
     }
 
     /**
      * Return the length of the interval. The length of an empty interval is
      * negative.
      */
-    public function getLength()
-    {
+    public function getLength() {
         $length = $this->hi() - $this->lo();
         if ($length >= 0) {
             return $length;
         }
         $length += 2 * S2::M_PI;
 // Empty intervals have a negative length.
-        return ($length > 0) ? $length : -1;
+        return ($length > 0) ? $length:-1;
+    }
+
+    /** Return true if the interval (which is closed) contains the point 'p'. */
+    public function contains($other) {
+        if ($other instanceof S1Interval) {
+            if ($this->isInverted()) {
+                if ($other->isInverted()) {
+                    return $other->lo() >= $this->lo() && $other->hi() <= $this->hi();
+                }
+                return (
+                        ($other->lo() >= $this->lo() || $other->hi() <= $this->hi()) &&
+                        !$this->isEmpty()
+                );
+            } else {
+                if ($other->isInverted()) {
+                    return $this->isFull() or $other->isEmpty();
+                }
+                return $other->lo() >= $this->lo() && $other->hi() <= $this->hi();
+            }
+        } else {
+            if ($other===-pi()) {
+                $other = pi();
+            }
+            return $this->fastContains($other);
+        }
     }
 
     /**
-     * Return the complement of the interior of the interval. An interval and its
-     * complement have the same boundary but do not share any interior values. The
-     * complement operator is not a bijection, since the complement of a singleton
-     * interval (containing a single value) is the same as the complement of an
-     * empty interval.
-     *#/
-     * public S1Interval complement() {
-     * if (lo() == hi()) {
-     * return full(); // Singleton.
-     * }
-     * return new S1Interval(hi(), lo(), true); // Handles
-     * // empty and
-     * // full.
-     * }
-     *
-     * /** Return true if the interval (which is closed) contains the point 'p'. */
-     public function contains($p) {
-         // Works for empty, full, and singleton intervals.
-         // assert (Math.abs(p) <= S2.M_PI);
-         if ($p == -S2::M_PI) {
-            $p = S2::M_PI;
-         }
-         return $this->fastContains($p);
-     }
-
-     /**
      * Return true if the interval (which is closed) contains the point 'p'. Skips
      * the normalization of 'p' from -Pi to Pi.
      *
      */
-     public function fastContains($p) {
-         if ($this->isInverted()) {
+    public function fastContains($p) {
+        if ($this->isInverted()) {
             return ($p >= $this->lo() || $p <= $this->hi()) && !$this->isEmpty();
-         } else {
+        } else {
             return $p >= $this->lo() && $p <= $this->hi();
-         }
-     }
+        }
+    }
 
-     /** Return true if the interior of the interval contains the point 'p'. *#/
-     * public boolean interiorContains(double p) {
-     * // Works for empty, full, and singleton intervals.
-     * // assert (Math.abs(p) <= S2.M_PI);
-     * if (p == -S2.M_PI) {
-     * p = S2.M_PI;
-     * }
-     *
-     * if (isInverted()) {
-     * return p > lo() || p < hi();
-     * } else {
-     * return (p > lo() && p < hi()) || isFull();
-     * }
-     * }
-     *
-     * /**
+    /**
      * Return true if the interval contains the given interval 'y'. Works for
      * empty, full, and singleton intervals.
      *#/
@@ -237,8 +193,7 @@ class S1Interval
      * the point +/-Pi has two representations, so the intervals [-Pi,-3] and
      * [2,Pi] intersect, for example.
      */
-    public function intersects(S1Interval $y)
-    {
+    public function intersects(S1Interval $y) {
         if ($this->isEmpty() || $y->isEmpty()) {
             return false;
         }
@@ -254,25 +209,6 @@ class S1Interval
     }
 
     /**
-     * Return true if the interior of this interval contains any point of the
-     * interval 'y' (including its boundary). Works for empty, full, and singleton
-     * intervals.
-     *#/
-     * public boolean interiorIntersects(final S1Interval y) {
-     * if (isEmpty() || y.isEmpty() || lo() == hi()) {
-     * return false;
-     * }
-     * if (isInverted()) {
-     * return y.isInverted() || y.lo() < hi() || y.hi() > lo();
-     * } else {
-     * if (y.isInverted()) {
-     * return y.lo() < hi() || y.hi() > lo();
-     * }
-     * return (y.lo() < hi() && y.hi() > lo()) || isFull();
-     * }
-     * }
-     *
-     * /**
      * Expand the interval by the minimum amount necessary so that it contains the
      * given point "p" (an angle in the range [-Pi, Pi]).
      *#/
@@ -306,8 +242,7 @@ class S1Interval
      * a point in this interval. Note that the expansion of an empty interval is
      * always empty. The radius must be non-negative.
      */
-    public function expanded($radius)
-    {
+    public function expanded($radius) {
 // assert (radius >= 0);
         if ($this->isEmpty()) {
             return $this;
@@ -323,56 +258,13 @@ class S1Interval
 //    double lo = Math.IEEEremainder(lo() - radius, 2 * S2.M_PI);
         $lo = S2::IEEEremainder($this->lo() - $radius, 2 * S2::M_PI);
         $hi = S2::IEEEremainder($this->hi() + $radius, 2 * S2::M_PI);
-        if ($lo == -S2::M_PI) {
+        if ($lo==-S2::M_PI) {
             $lo = S2::M_PI;
         }
         return new S1Interval($lo, $hi);
     }
 
     /**
-     * Return the smallest interval that contains this interval and the given
-     * interval "y".
-     *#/
-     * public S1Interval union(final S1Interval y) {
-     * // The y.is_full() case is handled correctly in all cases by the code
-     * // below, but can follow three separate code paths depending on whether
-     * // this interval is inverted, is non-inverted but contains Pi, or neither.
-     *
-     * if (y.isEmpty()) {
-     * return this;
-     * }
-     * if (fastContains(y.lo())) {
-     * if (fastContains(y.hi())) {
-     * // Either this interval contains y, or the union of the two
-     * // intervals is the Full() interval.
-     * if (contains(y)) {
-     * return this; // is_full() code path
-     * }
-     * return full();
-     * }
-     * return new S1Interval(lo(), y.hi(), true);
-     * }
-     * if (fastContains(y.hi())) {
-     * return new S1Interval(y.lo(), hi(), true);
-     * }
-     *
-     * // This interval contains neither endpoint of y. This means that either y
-     * // contains all of this interval, or the two intervals are disjoint.
-     * if (isEmpty() || y.fastContains(lo())) {
-     * return y;
-     * }
-     *
-     * // Check which pair of endpoints are closer together.
-     * double dlo = positiveDistance(y.hi(), lo());
-     * double dhi = positiveDistance(hi(), y.lo());
-     * if (dlo < dhi) {
-     * return new S1Interval(y.lo(), hi(), true);
-     * } else {
-     * return new S1Interval(lo(), y.hi(), true);
-     * }
-     * }
-     *
-     * /**
      * Return the smallest interval that contains the intersection of this
      * interval with "y". Note that the region of intersection may consist of two
      * disjoint intervals.
@@ -461,8 +353,7 @@ class S1Interval
      * it is more numerically stable (it does not lose precision for very small
      * positive distances).
      */
-    public static function positiveDistance($a, $b)
-    {
+    public static function positiveDistance($a, $b) {
         $d = $b - $a;
         if ($d >= 0) {
             return $d;
@@ -503,6 +394,10 @@ class S1Interval
     }
 
     public function equals($other): bool {
-        return $other instanceof S1Interval && $this->lo() === $other->lo() && $this->hi() === $other->hi();
+        return $other instanceof S1Interval && $this->lo()===$other->lo() && $this->hi()===$other->hi();
+    }
+
+    public function isFull(): bool {
+        return ($this->hi() - $this->lo()) === 2 * pi();
     }
 }
