@@ -2,6 +2,8 @@
 
 namespace S2;
 
+use Util\Math;
+
 class S2LatLng {
 
     const EARTH_RADIUS_METERS = 6367000.0;
@@ -82,8 +84,8 @@ class S2LatLng {
 
     public static function fromPoint(S2Point $point): S2LatLng {
         return new S2LatLng(
-            S2LatLng::latitude($point)->radians(),
-            S2LatLng::longitude($point)->radians()
+                S2LatLng::latitude($point)->radians(),
+                S2LatLng::longitude($point)->radians()
         );
     }
 
@@ -181,10 +183,20 @@ class S2LatLng {
      * Scales this point by the given scaling factor.
      * Note that there is no guarantee that the new point will be <em>valid</em>.
      */
-    public
-    function mul($m) {
+    public function mul($m) {
         // TODO(dbeaumont): Maybe check that m >= 0 ?
         return new S2LatLng($this->latRadians * $m, $this->lngRadians * $m);
+    }
+
+    public function normalized() {
+        return new S2LatLng(
+                max(-pi() / 2, min(pi() / 2, $this->latRadians())),
+                self::drem($this->lngRadians(), 2 * pi())
+        );
+    }
+
+    private static function drem(float $dx, float $dy) {
+        return Math::IEEEremainder($dx, $dy);
     }
 
     /*
