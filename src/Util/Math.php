@@ -6,8 +6,6 @@ class Math {
     const TWO_1023 = 8.98846567431158e307; // Long bits 0x7fe0000000000000L.
 
     public static function remainderSimple(float $x, float $y): float {
-        print_r([$x, $y, is_nan($x), $x===-INF, !($x < INF), $y===0., is_nan($y)]);
-
         if (is_nan($x) || is_nan($y) || $x===-INF || !($x < INF) || $y===0.) {
             return NAN;
         }
