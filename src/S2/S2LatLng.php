@@ -196,7 +196,7 @@ class S2LatLng {
     }
 
     private static function drem(float $dx, float $dy) {
-        return Math::IEEEremainder($dx, $dy);
+        return Math::remainderSimple($dx, $dy);
     }
 
     /*

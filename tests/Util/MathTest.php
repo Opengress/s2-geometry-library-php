@@ -6,17 +6,17 @@ use PHPUnit\Framework\TestCase;
 
 class MathTest extends TestCase {
     /**
-     * @dataProvider providerIEEEremainder
+     * @dataProvider providerRemainderSimple
      */
-    public function testIEEEremainder(float $x, float $y, float $expected) {
+    public function testRemainderSimple(float $x, float $y, float $expected) {
         if (is_nan($expected)) {
-            self::assertNan(Math::IEEEremainder($x, $y));
+            self::assertNan(Math::remainderSimple($x, $y));
         } else {
-            self::assertEquals($expected, Math::IEEEremainder($x, $y));
+            self::assertEquals($expected, Math::remainderSimple($x, $y));
         }
     }
 
-    public function providerIEEEremainder() {
+    public function providerRemainderSimple() {
         return [
                 [3, 2, -1],
                 [4, 2, 0],
@@ -31,6 +31,30 @@ class MathTest extends TestCase {
                 [-16.3, 4.1, 0.0999999999999979],
                 [17.8, -4.1, 1.4],
                 [-17.8, -4.1, -1.4],
+                [31.34, 2.2, 0.5399999999999974],
+                [-21, 7, -0.],
+                [NAN, 0, NAN],
+//                [-2.34, NAN, -2.34],
+        ];
+    }
+
+    /**
+     * @dataProvider providerRemainderIEEE
+     */
+    public function testRemainderIEEE(float $x, float $y, float $expected) {
+        if (is_nan($expected)) {
+            self::assertNan(Math::remainderIEEE($x, $y));
+        } else {
+            self::assertEquals($expected, Math::remainderIEEE($x, $y));
+        }
+    }
+
+    public function providerRemainderIEEE() {
+        return [
+                [31.34, 2.2, 0.5399999999999974],
+                [-21, 7, -0.],
+                [NAN, 0, NAN],
+                [-2.34, NAN, -2.34],
         ];
     }
 }
