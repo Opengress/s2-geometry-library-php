@@ -1,9 +1,13 @@
 <?php
 
+namespace S2;
+
+use Exception\IllegalArgumentException;
+
 class S2LatLngRect implements S2Region {
-    /** @var \R1Interval */
+    /** @var R1Interval */
     private $lat;
-    /** @var \S1Interval */
+    /** @var S1Interval */
     private $lng;
 
     /**
@@ -39,9 +43,9 @@ class S2LatLngRect implements S2Region {
     /**
      * The full allowable range of longitudes.
      */
-//  public static S1Interval fullLng() {
-//    return S1Interval.full();
-//  }
+    public static function fullLng(): S1Interval {
+        return S1Interval::full();
+    }
 
     /**
      * Construct a rectangle from a center point (in lat-lng space) and size in
@@ -135,13 +139,20 @@ class S2LatLngRect implements S2Region {
         return S1Angle::sradians($this->lng->hi());
     }
 
-//  public R1Interval lat() {
-//    return lat;
-//  }
+    public function lat() {
+        return $this->lat;
+    }
 
-//  public S1Interval lng() {
-//    return lng;
-//  }
+    public function equals($other): bool {
+        return
+                $other instanceof S2LatLngRect
+                && $this->lat()->equals($other->lat())
+                && $this->lng()->equals($other->lng());
+    }
+
+    public function lng() {
+        return $this->lng;
+    }
 
     public function lo() {
         return new S2LatLng($this->latLo(), $this->lngLo());
@@ -309,16 +320,17 @@ class S2LatLngRect implements S2Region {
      * More efficient version of Contains() that accepts a S2LatLng rather than an
      * S2Point.
      */
-    public function contains($ll) {
-        if ($ll instanceof S2LatLng) {
-            return ($this->lat->contains($ll->lat()->radians()) && $this->lng->contains($ll->lng()->radians()));
-        } else if ($ll instanceof S2LatLngRect) {
-            return lat . contains($ll . lat) && lng . contains($ll . lng);
-        } else if ($ll instanceof S2Cell) {
-            return $this->contains($cell->getRectBound());
-        } else if ($ll instanceof S2Point) {
-            return contains(new S2LatLng(p));
+    public function contains($other) {
+        if ($other instanceof S2LatLng) {
+            return ($this->lat->contains($other->lat()->radians()) && $this->lng->contains($other->lng()->radians()));
+        } else if ($other instanceof S2LatLngRect) {
+            return $this->lat->contains($other->lat()) && $this->lng->contains($other->lng());
+        } else if ($other instanceof S2Cell) {
+            return $this->contains($other->getRectBound());
+        } else if ($other instanceof S2Point) {
+            return contains(S2LatLng::fromPoint($other));
         }
+        throw new \Error('not implemented');
     }
 
     /**
@@ -466,8 +478,8 @@ class S2LatLngRect implements S2Region {
             return $this;
         }
         return new S2LatLngRect(
-            $this->lat->expanded($margin->lat()->radians())->intersection($this->fullLat()),
-            $this->lng->expanded($margin->lng()->radians())
+                $this->lat->expanded($margin->lat()->radians())->intersection($this->fullLat()),
+                $this->lng->expanded($margin->lng()->radians())
         );
     }
 
@@ -475,27 +487,11 @@ class S2LatLngRect implements S2Region {
      * Return the smallest rectangle containing the union of this rectangle and
      * the given rectangle.
      */
-//  public S2LatLngRect union(S2LatLngRect other) {
-//    return new S2LatLngRect(lat.union(other.lat), lng.union(other.lng));
-//  }
+    public function union(S2LatLngRect $other): S2LatLngRect {
+        return new S2LatLngRect($this->lat()->union($other->lat()), $this->lng()->union($other->lng()));
+    }
 
     /**
-     * Return the smallest rectangle containing the intersection of this rectangle
-     * and the given rectangle. Note that the region of intersection may consist
-     * of two disjoint rectangles, in which case a single rectangle spanning both
-     * of them is returned.
-     *#/
-     * public S2LatLngRect intersection(S2LatLngRect other) {
-     * R1Interval intersectLat = lat.intersection(other.lat);
-     * S1Interval intersectLng = lng.intersection(other.lng);
-     * if (intersectLat.isEmpty() || intersectLng.isEmpty()) {
-     * // The lat/lng ranges must either be both empty or both non-empty.
-     * return empty();
-     * }
-     * return new S2LatLngRect(intersectLat, intersectLng);
-     * }
-     *
-     * /**
      * Return a rectangle that contains the convolution of this rectangle with a
      * cap of the given angle. This expands the rectangle by a fixed distance (as
      * opposed to growing the rectangle in latitude-longitude space). The returned
@@ -568,7 +564,6 @@ class S2LatLngRect implements S2Region {
      * public S2Region clone() {
      * return new S2LatLngRect(this.lo(), this.hi());
      * }
-
      */
     public function getCapBound() {
         // We consider two possible bounding caps, one whose axis passes
@@ -611,6 +606,11 @@ class S2LatLngRect implements S2Region {
         return $poleCap;
     }
 
+    public function getIsPoint() {
+        return ($this->lat()->lo()===$this->lat()->hi() &&
+                $this->lng()->lo()===$this->lng()->hi());
+    }
+
     public function getRectBound() {
         return $this;
     }
@@ -632,19 +632,6 @@ class S2LatLngRect implements S2Region {
     }
 
     /**
-     * Return true if the edge AB intersects the given edge of constant longitude.
-     *#/
-     * private static boolean intersectsLngEdge(S2Point a, S2Point b,
-     * R1Interval lat, double lng) {
-     * // Return true if the segment AB intersects the given edge of constant
-     * // longitude. The nice thing about edges of constant longitude is that
-     * // they are straight lines on the sphere (geodesics).
-     *
-     * return S2.simpleCrossing(a, b, S2LatLng.fromRadians(lat.lo(), lng)
-     * .toPoint(), S2LatLng.fromRadians(lat.hi(), lng).toPoint());
-     * }
-     *
-     * /**
      * Return true if the edge AB intersects the given edge of constant latitude.
      *#/
      * private static boolean intersectsLatEdge(S2Point a, S2Point b, double lat,

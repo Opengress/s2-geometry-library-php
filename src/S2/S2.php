@@ -1,5 +1,7 @@
 <?php
 
+namespace S2;
+
 class S2 {
     public static function IEEERemainder($dividend, $divisor) {
         return $dividend - ($divisor * round($dividend / $divisor));
@@ -47,7 +49,12 @@ class S2 {
     }
 
     /** Mapping Hilbert traversal order to orientation adjustment mask. */
-    public static $POS_TO_ORIENTATION = null;
+    private static $POS_TO_ORIENTATION = array(
+        S2CellId::SWAP_MASK,
+        0,
+        0,
+        S2CellId::INVERT_MASK + S2CellId::SWAP_MASK
+    );
 
     /**
      * Returns an XOR bit mask indicating how the orientation of a child subcell
@@ -55,15 +62,14 @@ class S2 {
      * be XOR'd with the parent cell's orientation to give the orientation of
      * the child cell.
      *
-     * @param the $position
-     * @throws Exception
-     * @internal param \the $position position of the subcell in the Hilbert traversal, in
-     *     the range [0,3].
-     * @return a bit mask containing some combination of {@link #SWAP_MASK} and
-     *     {@link #INVERT_MASK}.
+     * @param int $position position of the subcell in the Hilber traversal,
+     *                      in the range [0,3].
+     * @return int a bit mask containing some combination of {@link #SWAP_MASK}
+     *             and {@link #INVERT_MASK}.
+     * @throws \Exception
      */
     public static function posToOrientation($position) {
-        if (!(0 <= $position && $position < 4)) throw new Exception();
+        if (!(0 <= $position && $position < 4)) throw new \Exception();
         return self::$POS_TO_ORIENTATION[$position];
     }
 
@@ -81,15 +87,15 @@ class S2 {
      * curve traversal with the given orientation. This is the inverse of
      * {@link #ijToPos}.
      *
-     * @param orientation the subcell orientation, in the range [0,3].
-     * @param position the position of the subcell in the Hilbert traversal, in
-     *     the range [0,3].
-     * @return the IJ-index where {@code 0->(0,0), 1->(0,1), 2->(1,0), 3->(1,1)}.
-     * @throws IllegalArgumentException if either parameter is out of bounds.
+     * @param int $orientation subcell orientation, in the range [0,3].
+     * @param int $position position of the subcell in the Hilbert traversal,
+     *                      in the range [0,3].
+     * @return int IJ-index where
+     * @throws \Exception
      */
     public static function posToIJ($orientation, $position) {
-        if (!(0 <= $orientation && $orientation <= 3)) throw new Exception();
-        if (!(0 <= $position && $position <= 3)) throw new Exception();
+        if (!(0 <= $orientation && $orientation <= 3)) throw new \Exception();
+        if (!(0 <= $position && $position <= 3)) throw new \Exception();
         return self::$POS_TO_IJ[$orientation][$position];
     }
 
@@ -132,15 +138,15 @@ class S2 {
      * return new S2Point(0, 1, 0);
      * }
      *
-     * /**
+	/**
      * Return true if the given point is approximately unit length (this is mainly
      * useful for assertions).
-     *#/
-     * public static boolean isUnitLength(S2Point p) {
-     * return Math.abs(p.norm2() - 1) <= 1e-15;
-     * }
-     *
-     * /**
+     */
+    public static function isUnitLength(S2Point $p) {
+    	return abs($p->norm2() - 1) <= 1e-15;
+    }
+
+    /**
      * Return true if edge AB crosses CD at a point that is interior to both
      * edges. Properties:
      *
@@ -777,5 +783,3 @@ class Metric {
         return $level;
     }
 }
-
-S2::$POS_TO_ORIENTATION = array(S2CellId::SWAP_MASK, 0, 0, S2CellId::INVERT_MASK + S2CellId::SWAP_MASK);
