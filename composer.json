@@ -5,6 +5,10 @@
     "require-dev": {
         "phpunit/phpunit": "^11"
     },
+    "require": {
+        "ext-gmp": "*",
+        "ext-ctype": "*"
+    },
     "autoload": {
         "psr-4": {
             "": "src/"

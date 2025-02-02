@@ -2,6 +2,8 @@
 declare(strict_types=1);
 namespace Util;
 
+use GMP;
+
 class Math {
     const TWO_1023 = 8.98846567431158e307; // Long bits 0x7fe0000000000000L.
 
@@ -64,5 +66,11 @@ class Math {
             }
         }
         return $negative ? -$x:$x;
+    }
+
+    public static function unsignedRightShift(GMP|int $what, int $amount): GMP {
+        $power = gmp_pow(gmp_init(2, 10), $amount);
+        $shifted = gmp_div_q($what, $power);
+        return gmp_and($shifted, gmp_init(7, 10));
     }
 }

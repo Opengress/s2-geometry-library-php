@@ -2,23 +2,28 @@
 
 namespace S2;
 
+use Exception;
+use GMP;
+use RuntimeException;
+use Util\Math;
+
 class S2CellId {
 
     // Although only 60 bits are needed to represent the index of a leaf
     // cell, we need an extra bit in order to represent the position of
     // the center of the leaf cell along the Hilbert curve.
-    const FACE_BITS = 3;
+    const int FACE_BITS = 3;
 
-    const NUM_FACES = 6;
+    const int NUM_FACES = 6;
 
-    const MAX_LEVEL = 30; // Valid levels: 0..MAX_LEVEL
+    const int MAX_LEVEL = 30; // Valid levels: 0..MAX_LEVEL
 
-    const POS_BITS = 61; //2 * MAX_LEVEL + 1;
+    const int POS_BITS = 61; //2 * MAX_LEVEL + 1;
 
-    const MAX_SIZE = 0x40000000; //1 << MAX_LEVEL;
+    const int MAX_SIZE = 0x40000000; //1 << MAX_LEVEL;
 
     // Constant related to unsigned long's
-    const MAX_UNSIGNED = -1; // Equivalent to 0xffffffffffffffffL
+    public static GMP $MAX_UNSIGNED; // Equivalent to 0xffffffffffffffffL
 
     // The following lookup tables are used to convert efficiently between an
     // (i,j) cell index and the corresponding position along the Hilbert curve.
@@ -42,11 +47,11 @@ class S2CellId {
     // supplied in the declaration, we don't need the values here. Failing to
     // define storage causes link errors for any code that tries to take the
     // address of one of these values.
-    const LOOKUP_BITS = 4;
+    const int LOOKUP_BITS = 4;
 
-    const SWAP_MASK = 0x01;
+    const int SWAP_MASK = 0x01;
 
-    const INVERT_MASK = 0x02;
+    const int INVERT_MASK = 0x02;
 
     public static $LOOKUP_POS = null;
 
@@ -61,27 +66,49 @@ class S2CellId {
     /**
      * The id of the cell.
      */
-    public $id;
+    private GMP $id;
 
     public function __construct($id = null)
     {
-        $this->id = $id !== null ? $id : 0;
+        // Convert numeric or null input to a GMP resource. This class expects an
+        // unsigned 64-bit so if $id is integer or string in decimal/hex, just adapt.
+        if ($id === null) {
+            $this->id = gmp_init(0, 10);
+        } elseif ($id instanceof GMP) {
+            $this->id = $id;
+        } elseif (is_int($id)) {
+            // If it's a plain integer in decimal, we pass base=10; if hex, base=16, etc.
+            // For simplicity, assume decimal here:
+            $this->id = gmp_init($id, 10);
+        } elseif (is_string($id)) {
+            // (a) If it starts with "0x" or only has [0-9A-Fa-f], parse base-16
+            // (b) Otherwise parse decimal
+            $trimmed = strtolower(ltrim($id));
+            if (str_starts_with($trimmed, '0x') || ctype_xdigit($trimmed)) {
+                $this->id = gmp_init($trimmed, 16);
+            } else {
+                $this->id = gmp_init($trimmed, 10);
+            }
+            return;
+        } else {
+            // Fallback, force it to zero if type is weird
+            $this->id = gmp_init(0, 10);
+        }
     }
 
     /** The default constructor returns an invalid cell id. */
-    public static function none()
-    {
+    public static function none(): S2CellId {
         return new S2CellId();
     }
 
-    /**
+    /*
      * Returns an invalid cell id guaranteed to be larger than any valid cell id.
      * Useful for creating indexes.
      *#/
      * public static S2CellId sentinel() {
      * return new S2CellId(MAX_UNSIGNED); // -1
      * }
-     *
+     */
 
     /**
      * Return a cell given its face (range 0..5), 61-bit Hilbert curve position
@@ -90,15 +117,24 @@ class S2CellId {
      * the returned cell. This is a static function rather than a constructor in
      * order to give names to the arguments.
      *
-     * @param $face
-     * @param $pos
-     * @param $level
+     * @param int $face
+     * @param GMP $pos
+     * @param int $level
      * @return S2CellId
      */
-    public static function fromFacePosLevel($face, $pos, $level)
+    public static function fromFacePosLevel(int $face, GMP $pos, int $level): self
     {
-        $s2cell = new S2CellId(($face << self::POS_BITS) + ($pos | 1));
-        return $s2cell->parent($level);
+        // ($face << self::POS_BITS) + ($pos | 1)
+        // face << 61 => multiply face by 2^61
+        $faceGmp   = gmp_init($face, 10);
+        $power = gmp_pow(gmp_init(2, 10), self::POS_BITS);  // 2^shift
+        $shifted   = gmp_mul($faceGmp, $power);
+        // set the low bit of $pos: $pos | 1
+        $posOr1    = gmp_or($pos, gmp_init(1, 10));
+        $facePlus  = gmp_add($shifted, $posOr1);
+
+        $newIdObj  = new self($facePlus);
+        return $newIdObj->parent($level);
     }
 
     /**
@@ -108,8 +144,7 @@ class S2CellId {
      * @param S2Point $p
      * @return S2CellId
      */
-    public static function fromPoint(S2Point $p)
-    {
+    public static function fromPoint(S2Point $p): S2CellId {
         $face = S2Projections::xyzToFace($p);
         $uv = S2Projections::validFaceXyzToUv($face, $p);
         $i = self::stToIJ(S2Projections::uvToST($uv->x()));
@@ -123,8 +158,7 @@ class S2CellId {
      * @param S2LatLng $ll
      * @return S2CellId
      */
-    public static function fromLatLng(S2LatLng $ll)
-    {
+    public static function fromLatLng(S2LatLng $ll): S2CellId {
         return self::fromPoint($ll->toPoint());
     }
 
@@ -138,8 +172,7 @@ class S2CellId {
      * Return the direction vector corresponding to the center of the given cell.
      * The vector returned by ToPointRaw is not necessarily unit length.
      */
-    public function toPointRaw()
-    {
+    public function toPointRaw(): S2Point {
         // First we compute the discrete (i,j) coordinates of a leaf cell contained
         // within the given cell. Given that cells are represented by the Hilbert
         // curve position corresponding at their center, it turns out that the cell
@@ -167,7 +200,7 @@ class S2CellId {
         if ($this->isLeaf()) {
             $delta = 1;
         } else {
-            $delta = ((($i ^ ($this->id >> 2 & PHP_INT_MAX >> 1)) & 1) != 0) ? 2 : 0;
+            $delta = ((($i ^ Math::unsignedRightShift($this->id, 2)) & 1) != 0) ? 2 : 0;
             /* >>> */
         }
         $si = ($i << 1) + $delta - self::MAX_SIZE;
@@ -176,8 +209,7 @@ class S2CellId {
     }
 
     /** Return the S2LatLng corresponding to the center of the given cell. */
-    public function toLatLng()
-    {
+    public function toLatLng(): S2LatLng {
         return new S2LatLng($this->toPointRaw());
     }
 
@@ -196,53 +228,51 @@ class S2CellId {
      * return face() < NUM_FACES && ((lowestOnBit() & (0x1555555555555555L)) != 0);
      * }
      * /** Which cube face this cell belongs to, in the range 0..5. */
-    public function face()
+    public function face(): int
     {
-        return $this->id >> self::POS_BITS & PHP_INT_MAX >> (self::POS_BITS - 1);
-        /* >>> */
+        return gmp_intval(Math::unsignedRightShift($this->id, self::POS_BITS));
     }
 
     /**
      * The position of the cell center along the Hilbert curve over this face, in
      * the range 0..(2**kPosBits-1).
      */
-    public function pos()
+    public function pos(): GMP
     {
-        return $this->id & (-1 >> self::FACE_BITS) & (PHP_INT_MAX >> (self::FACE_BITS - 1));
-        /* >>> logical shift right */
+        return gmp_and($this->id, Math::unsignedRightShift(self::$MAX_UNSIGNED, self::FACE_BITS));
     }
 
     /** Return the subdivision level of the cell (range 0..MAX_LEVEL). */
-    public function level()
-    {
+    public function level(): int {
         // Fast path for leaf cells.
         if ($this->isLeaf()) {
             return self::MAX_LEVEL;
         }
-        $x = $this->id & 0xffffffff;
+
+        $x = $this->id;
         $level = -1;
+
         if ($x != 0) {
             $level += 16;
         } else {
-            $x = $this->id >> 32 & PHP_INT_MAX >> 31;
-            /* >>> */
+            $x = Math::unsignedRightShift($this->id, 32);
         }
-        // We only need to look at even-numbered bits to determine the
-        // level of a valid cell id.
-        $x &= -$x; // Get lowest bit.
-        if (($x & 0x00005555) != 0) {
+
+        // Assume $x is already an integer.
+        $x = $x & (-$x);  // Get the lowest set bit.
+        if (($x & 0x00005555) !== 0) {
             $level += 8;
         }
-        if (($x & 0x00550055) != 0) {
+        if (($x & 0x00550055) !== 0) {
             $level += 4;
         }
-        if (($x & 0x05050505) != 0) {
+        if (($x & 0x05050505) !== 0) {
             $level += 2;
         }
-        if (($x & 0x11111111) != 0) {
+        if (($x & 0x11111111) !== 0) {
             $level += 1;
         }
-        // assert (level >= 0 && level <= MAX_LEVEL);
+
         return $level;
     }
 
@@ -250,17 +280,17 @@ class S2CellId {
      * Return true if this is a leaf cell (more efficient than checking whether
      * level() == MAX_LEVEL).
      */
-    public function isLeaf()
+    public function isLeaf(): bool
     {
-        return ($this->id & 1) != 0;
+        // ($this->id & 1) != 0  => gmp_testbit($this->id, 0)
+        return gmp_testbit($this->id, 0);
     }
 
     /**
      * Return true if this is a top-level face cell (more efficient than checking
      * whether level() == 0).
      */
-    public function isFace()
-    {
+    public function isFace(): bool {
         return ($this->id & ($this->lowestOnBitForLevel(0) - 1)) == 0;
     }
 
@@ -269,10 +299,10 @@ class S2CellId {
      * level, relative to its parent. The argument should be in the range
      * 1..MAX_LEVEL. For example, child_position(1) returns the position of this
      * cell's level-1 ancestor within its top-level face cell.
-     *#/
-     * public int childPosition(int level) {
-     * return (int) (id >>> (2 * (MAX_LEVEL - level) + 1)) & 3;
-     * }*/
+     */
+      public function childPosition(int $level): int {
+        return gmp_intval(gmp_and(Math::unsignedRightShift($this->id , (2 * (self::MAX_LEVEL - $level) + 1)), 3));
+      }
 
     // Methods that return the range of cell ids that are contained
     // within this cell (including itself). The range is *inclusive*
@@ -287,14 +317,22 @@ class S2CellId {
     // because (range_max().id() + 1) is not always a valid cell id, and the
     // iterator would need to be tested using "<" rather that the usual "!=".
 
-    public function rangeMin()
+    public function rangeMin(): self
     {
-        return new S2CellId($this->id - ($this->lowestOnBit() - 1));
+        // $this->id - (lowestOnBit() - 1)
+        $lsb     = $this->lowestOnBit();
+        $subPart = gmp_sub($lsb, gmp_init(1,10));
+        $val     = gmp_sub($this->id, $subPart);
+        return new self($val);
     }
 
-    public function rangeMax()
+    public function rangeMax(): self
     {
-        return new S2CellId($this->id + ($this->lowestOnBit() - 1));
+        // $this->id + (lowestOnBit() - 1)
+        $lsb     = $this->lowestOnBit();
+        $subPart = gmp_sub($lsb, gmp_init(1,10));
+        $val     = gmp_add($this->id, $subPart);
+        return new self($val);
     }
 
     /**
@@ -303,13 +341,16 @@ class S2CellId {
      * @param S2CellId $other
      * @return bool
      */
-    public function contains(S2CellId $other)
+    public function contains(S2CellId $other): bool
     {
-        // assert (isValid() && other.isValid());
-        return $other->greaterOrEquals($this->rangeMin()) && $other->lessOrEquals($this->rangeMax());
+        // check other >= this->rangeMin() && other <= this->rangeMax()
+        $min = $this->rangeMin()->id();
+        $max = $this->rangeMax()->id();
+        $o   = $other->id();
+        return (gmp_cmp($o, $min) >= 0) && (gmp_cmp($o, $max) <= 0);
     }
 
-    /** Return true if the given cell intersects this one. *#/
+    /* Return true if the given cell intersects this one. *#/
      * public boolean intersects(S2CellId other) {
      * // assert (isValid() && other.isValid());
      * return other.rangeMin().lessOrEquals(rangeMax())
@@ -324,16 +365,21 @@ class S2CellId {
      * @param int|null $level
      * @return S2CellId
      */
-    public function parent($level = null)
+    public function parent(?int $level = null): self
     {
-        // assert (isValid() && level() > 0);
         if ($level === null) {
-            $newLsb = $this->lowestOnBit() << 2;
-        }
-        else {
+            // $newLsb = $this->lowestOnBit() << 2
+            $lowest = $this->lowestOnBit();
+            $power = gmp_pow(gmp_init(2, 10), 2);  // 2^shift
+            $newLsb = gmp_mul($lowest, $power);
+        } else {
             $newLsb = self::lowestOnBitForLevel($level);
         }
-        return new S2CellId(($this->id & -$newLsb) | $newLsb);
+        // ($this->id & -$newLsb) | $newLsb
+        $negNewLsb = gmp_neg($newLsb);
+        $andPart   = gmp_and($this->id, $negNewLsb);
+        $orPart    = gmp_or($andPart, $newLsb);
+        return new self($orPart);
     }
 
     // Iterator-style methods for traversing the immediate children of a cell or
@@ -350,23 +396,21 @@ class S2CellId {
     // rather than "c != id.childEnd()".
 
 
-    public function childBegin($level = null)
-    {
+    public function childBegin($level = null): S2CellId {
         // assert (isValid() && level() < MAX_LEVEL);
         if ($level === null) {
             $oldLsb = $this->lowestOnBit();
-            return new S2CellId($this->id - $oldLsb + (S2PhpUtils::unsignedRightShift($oldLsb, 2)));
+            return new S2CellId($this->id - $oldLsb + gmp_intval(Math::unsignedRightShift($oldLsb, 2)));
         } else {
             return new S2CellId($this->id - $this->lowestOnBit() + $this->lowestOnBitForLevel($level));
         }
     }
 
-    public function childEnd($level = null)
-    {
+    public function childEnd($level = null): S2CellId {
         // assert (isValid() && level >= this.level() && level <= MAX_LEVEL);
         if($level === null) {
             $oldLsb = $this->lowestOnBit();
-            return new S2CellId($this->id + $oldLsb + (S2PhpUtils::unsignedRightShift($oldLsb, 2)));
+            return new S2CellId($this->id + $oldLsb + gmp_intval(Math::unsignedRightShift($oldLsb, 2)));
         } else {
             return new S2CellId($this->id + $this->lowestOnBit() + $this->lowestOnBitForLevel($level));
         }
@@ -377,9 +421,14 @@ class S2CellId {
      * correctly when advancing from one face to the next, but does *not* wrap
      * around from the last face to the first or vice versa.
      */
-    public function next()
+    public function next(): self
     {
-        return new S2CellId($this->id + ($this->lowestOnBit() << 1));
+        // next() => $this->id + (lowestOnBit() << 1)
+        $lsb    = $this->lowestOnBit();
+        $power = gmp_pow(gmp_init(2, 10), 1);  // 2^shift
+        $shift  = gmp_mul($lsb, $power);
+        $result = gmp_add($this->id, $shift);
+        return new self($result);
     }
 
     /**
@@ -387,9 +436,14 @@ class S2CellId {
      * correctly when advancing from one face to the next, but does *not* wrap
      * around from the last face to the first or vice versa.
      */
-    public function prev()
+    public function prev(): self
     {
-        return new S2CellId($this->id - ($this->lowestOnBit() << 1));
+        // prev() => $this->id - (lowestOnBit() << 1)
+        $lsb    = $this->lowestOnBit();
+        $power = gmp_pow(gmp_init(2, 10), 1);  // 2^shift
+        $shift  = gmp_mul($lsb, $power);
+        $result = gmp_sub($this->id, $shift);
+        return new self($result);
     }
      /**
      * Like next(), but wraps around from the last face to the first and vice
@@ -403,7 +457,9 @@ class S2CellId {
      * }
      * return new S2CellId(n.id - WRAP_OFFSET);
      * }
-     * /**
+      * */
+
+    /**
      * Like prev(), but wraps around from the last face to the first and vice
      * versa. Should *not* be used for iteration in conjunction with
      * child_begin(), child_end(), Begin(), or End().
@@ -421,30 +477,29 @@ class S2CellId {
      * public static S2CellId end(int level) {
      * return fromFacePosLevel(5, 0, 0).childEnd(level);
      * }
-     
-    /**
+ *
+* /**
      * Decodes the cell id from a compact text string suitable for display or
      * indexing. Cells at lower levels (i.e. larger cells) are encoded into
      * fewer characters. The maximum token length is 16.
      *
      * @param string $token the token to decode
      * @return S2CellId for that token
-     * @throws \Exception if the token is not formatted correctly
+     * @throws Exception if the token is not formatted correctly
      */
-    public static function fromToken($token)
-    {
+    public static function fromToken(string $token): S2CellId {
         if ($token == null) {
-            throw new \Exception("Null string in S2CellId.fromToken");
+            throw new Exception("Null string in S2CellId.fromToken");
         }
         if (strlen($token) == 0) {
-            throw new \Exception("Empty string in S2CellId.fromToken");
+            throw new Exception("Empty string in S2CellId.fromToken");
         }
         if (strlen($token) > 16 || $token === "X") {
             return self::none();
         }
 
-        $value = str_pad($token, 16, '0');
-        $value = hexdec($value);
+//        $token = str_pad($token, 16, '0', STR_PAD_LEFT);
+        $value = gmp_init($token, 16);
         return new S2CellId($value);
     }
 
@@ -459,11 +514,11 @@ class S2CellId {
      *
      * @return string the encoded cell id
      */
-    public function toToken() {
+    public function toToken(): string {
       if ($this->id == 0) {
         return "X";
       }
-      $hex = strtolower(dechex($this->id));
+      $hex = strtolower( gmp_strval(gmp_init($this->id), 16));
       $sb = '';
       for ($i = strlen($hex); $i < 16; $i++) {
         $sb .= '0';
@@ -474,7 +529,7 @@ class S2CellId {
             return substr($sb, 0, $len);
         }
       }
-      throw new \RuntimeException("Shouldn't make it here");
+      throw new RuntimeException("Shouldn't make it here");
      }
 
 
@@ -487,7 +542,9 @@ class S2CellId {
      * private static boolean overflowInParse(long current, int digit) {
      * return overflowInParse(current, digit, 10);
      * }
-     * /**
+      */
+
+     /**
      * Returns true if (current * radix) + digit is a number too large to be
      * represented by an unsigned long.  This is useful for detecting overflow
      * while parsing a string representation of a number.
@@ -526,7 +583,9 @@ class S2CellId {
      * private static final int maxValueMods[] = {0, 0, // 0 and 1 are invalid
      * 1, 0, 3, 0, 3, 1, 7, 6, 5, 4, 3, 2, 1, 0, 15, 0, 15, 16, 15, 15, // 2-21
      * 15, 5, 15, 15, 15, 24, 15, 23, 15, 15, 31, 15, 17, 15, 15 }; // 22-36
-     * /**
+     */
+
+     /**
      * Return the four cells that are adjacent across the cell's four edges.
      * Neighbors are returned in the order defined by S2Cell::GetEdge. All
      * neighbors are guaranteed to be distinct.
@@ -560,8 +619,7 @@ class S2CellId {
      * @param $level
      * @param $output
      */
-    public function getVertexNeighbors($level, &$output)
-    {
+    public function getVertexNeighbors($level, &$output): void {
         // "level" must be strictly less than this cell's level so that we can
         // determine which vertex this cell is closest to.
         // assert (level < this.level());
@@ -608,7 +666,7 @@ class S2CellId {
      * Requires: nbr_level >= this->level(). Note that for cells adjacent to a
      * face vertex, the same neighbor may be appended more than once.
      */
-     public function getAllNeighbors($nbrLevel, &$output) {
+     public function getAllNeighbors($nbrLevel, &$output): void {
          $i = 0;
          $j = 0;
          $null = null;
@@ -658,8 +716,7 @@ class S2CellId {
      * @param $j
      * @return S2CellId
      */
-    public static function fromFaceIJ($face, $i, $j)
-    {
+    public static function fromFaceIJ($face, $i, $j): S2CellId {
         // Optimization notes:
         // - Non-overlapping bit fields can be combined with either "+" or "|".
         // Generally "+" seems to produce better code, but not always.
@@ -687,12 +744,19 @@ class S2CellId {
             $bits = self::getBits($n, $i, $j, $k, $bits);
         }
 
-        $s = new S2CellId(((($n[1] << 32) + $n[0]) << 1) + 1);
-        return $s;
+        return new S2CellId(((($n[1] << 32) + $n[0]) << 1) + 1);
     }
 
-    private static function getBits(&$n, $i, $j, $k, $bits)
-    {
+    /**
+     *
+     * @param $n
+     * @param int $i
+     * @param int $j
+     * @param int $k
+     * @param int $bits The current orientation bits.
+     * @return int         The new orientation bits (after the lookup).
+     */
+    private static function getBits(&$n, int $i, int $j, int $k, int $bits): int {
         $mask = (1 << self::LOOKUP_BITS) - 1;
         $bits += ((($i >> ($k * self::LOOKUP_BITS)) & $mask) << (self::LOOKUP_BITS + 2));
         $bits += ((($j >> ($k * self::LOOKUP_BITS)) & $mask) << 2);
@@ -714,8 +778,7 @@ class S2CellId {
      * @param null $orientation
      * @return int
      */
-    public function toFaceIJOrientation(&$pi, &$pj, &$orientation = null)
-    {
+    public function toFaceIJOrientation(&$pi, &$pj, &$orientation = null): int {
         // System.out.println("Entering toFaceIjorientation");
         $face = $this->face();
         $bits = ($face & self::SWAP_MASK);
@@ -753,13 +816,12 @@ class S2CellId {
         return $face;
     }
 
-    private function getBits1(&$i, &$j, $k, $bits)
-    {
-        $nbits = ($k == 7) ? (self::MAX_LEVEL - 7 * self::LOOKUP_BITS) : self::LOOKUP_BITS;
+    private function getBits1(&$i, &$j, $k, $bits): int {
+        $nbits = ($k == 7) ? gmp_mul(gmp_sub(self::MAX_LEVEL, 7), self::LOOKUP_BITS) : self::LOOKUP_BITS;
 
         $shift = ($k * 2 * self::LOOKUP_BITS + 1);
-
-        $bits += (($this->id >> $shift & PHP_INT_MAX >> ($shift - 1)) & ((1 << (2 * $nbits)) - 1)) << 2;
+        $bits += gmp_intval(Math::unsignedRightShift($this->id, $shift) &
+                ((1 << (2 * $nbits)) - 1)) << 2;
         /* >>> */
         /*
          * System.out.println("id is: " + id_); System.out.println("bits is " +
@@ -780,8 +842,7 @@ class S2CellId {
     }
 
     /** Return the lowest-numbered bit that is on for cells at the given level. */
-    public function lowestOnBit()
-    {
+    public function lowestOnBit(): int {
         return $this->id & -$this->id;
     }
 
@@ -791,12 +852,15 @@ class S2CellId {
      * b.lsb() if and only if a.level() >= b.level(), but the first test is more
      * efficient
      *
-     * @param $level
-     * @return int
+     * @param int $level
+     * @return GMP
      */
-    public static function lowestOnBitForLevel($level)
+    public static function lowestOnBitForLevel(int $level): GMP
     {
-        return 1 << (2 * (self::MAX_LEVEL - $level));
+        // (1 << (2*(MAX_LEVEL - level)))
+        $shift = 2 * gmp_sub(self::MAX_LEVEL, $level);
+        $power = gmp_pow(gmp_init(2, 10), $shift);
+        return gmp_mul(1, $power);
     }
 
     /**
@@ -806,8 +870,7 @@ class S2CellId {
      * @param $s
      * @return mixed
      */
-    private static function stToIJ($s)
-    {
+    private static function stToIJ($s): mixed {
         // Converting from floating-point to integers via static_cast is very slow
         // on Intel processors because it requires changing the rounding mode.
         // Rounding to the nearest integer using FastIntRound() is much faster.
@@ -825,8 +888,7 @@ class S2CellId {
      * @param $ti
      * @return S2Point
      */
-    private static function faceSiTiToXYZ($face, $si, $ti)
-    {
+    private static function faceSiTiToXYZ($face, $si, $ti): S2Point {
         $kScale = 1.0 / self::MAX_SIZE;
         $u = S2Projections::stToUV($kScale * $si);
         $v = S2Projections::stToUV($kScale * $ti);
@@ -842,8 +904,7 @@ class S2CellId {
      * @param $j
      * @return S2CellId
      */
-    private static function fromFaceIJWrap($face, $i, $j)
-    {
+    private static function fromFaceIJWrap($face, $i, $j): S2CellId {
         // Convert i and j to the coordinates of a leaf cell just beyond the
         // boundary of this face. This prevents 32-bit overflow in the case
         // of finding the neighbors of a face cell, and also means that we
@@ -875,8 +936,7 @@ class S2CellId {
      * @param $sameFace
      * @return S2CellId
      */
-    public static function fromFaceIJSame($face, $i, $j, $sameFace)
-    {
+    public static function fromFaceIJSame($face, $i, $j, $sameFace): S2CellId {
         if ($sameFace) {
             return S2CellId::fromFaceIJ($face, $i, $j);
         } else {
@@ -884,12 +944,11 @@ class S2CellId {
         }
     }
 
-    public function equals($that)
-    {
+    public function equals($that): bool {
         if (!($that instanceof S2CellId)) {
             return false;
         }
-        return $this->id() == $that->id();
+        return $this->id() === $that->id();
     }
 
     /*
@@ -897,8 +956,7 @@ class S2CellId {
     /**
     * Returns true if x1 < x2, when both values are treated as unsigned.
     */
-    public static function unsignedLongLessThan($x1, $x2)
-    {
+    public static function unsignedLongLessThan($x1, $x2): bool {
         return ($x1 & ~PHP_INT_MAX) < ($x2 & ~PHP_INT_MAX) // compare first bit
             || (($x1 & ~PHP_INT_MAX) == ($x2 & ~PHP_INT_MAX)
                 && ($x1 & PHP_INT_MAX) < ($x2 & PHP_INT_MAX));
@@ -911,8 +969,7 @@ class S2CellId {
      * @param $x2
      * @return bool
      */
-    public static function unsignedLongGreaterThan($x1, $x2)
-    {
+    public static function unsignedLongGreaterThan($x1, $x2): bool {
         return ($x1 & ~PHP_INT_MAX) > ($x2 & ~PHP_INT_MAX) // compare first bit
             || (($x1 & ~PHP_INT_MAX) == ($x2 & ~PHP_INT_MAX)
                 && ($x1 & PHP_INT_MAX) > ($x2 & PHP_INT_MAX));
@@ -928,23 +985,22 @@ class S2CellId {
   }
    */
 
-    public function lessOrEquals(S2CellId $x)
-    {
-        return $this->unsignedLongLessThan($this->id, $x->id) || $this->id == $x->id;
+    public function lessOrEquals(S2CellId $x): bool {
+        return $this->unsignedLongLessThan($this->id, $x->id) || $this->id === $x->id;
     }
 
-    public function greaterOrEquals(S2CellId $x)
-    {
-        return $this->unsignedLongGreaterThan($this->id, $x->id) || $this->id == $x->id;
+    public function greaterOrEquals(S2CellId $x): bool {
+        return $this->unsignedLongGreaterThan($this->id, $x->id) || $this->id === $x->id;
     }
 
     /*
-  @Override
-  public int hashCode() {
-    return (int) ((id >>> 32) + id);
+  @Override useless in php but hey why not
+    */
+  public function hashCode() {
+    return gmp_intval(gmp_add(Math::unsignedRightShift($this->id, 32), $this->id));
   }
 
-*/
+
     public function __toString()
     {
         return sprintf("(face=%d, pos=%16x, level=%d)", $this->face(), $this->pos(), $this->level());
@@ -960,9 +1016,9 @@ class S2CellId {
      * @param $origOrientation
      * @param $pos
      * @param $orientation
+     * @throws Exception
      */
-    public static function initLookupCell($level, $i, $j, $origOrientation, $pos, $orientation)
-    {
+    public static function initLookupCell($level, $i, $j, $origOrientation, $pos, $orientation): void {
         if ($level == self::LOOKUP_BITS) {
             $ij = ($i << self::LOOKUP_BITS) + $j;
             self::$LOOKUP_POS[($ij << 2) + $origOrientation] = ($pos << 2) + $orientation;
@@ -978,7 +1034,7 @@ class S2CellId {
                 $orientationMask = S2::posToOrientation($subPos);
                 self::initLookupCell(
                     $level,
-                    $i + ($ij >> 1 & PHP_INT_MAX >> 0),
+                    $i + gmp_intval(Math::unsignedRightShift($ij, 1)),
                     $j + ($ij & 1),
                     $origOrientation,
                     $pos + $subPos,
@@ -996,9 +1052,11 @@ class S2CellId {
 */
 }
 
+S2CellId::$MAX_UNSIGNED = gmp_init("0xffffffffffffffff", 16);
 S2CellId::$LOOKUP_POS = array_pad(array(), 1 << (2 * S2CellId::LOOKUP_BITS + 2), 0);
 S2CellId::$LOOKUP_IJ = array_pad(array(), 1 << (2 * S2CellId::LOOKUP_BITS + 2), 0);
 S2CellId::initLookupCell(0, 0, 0, 0, 0, 0);
 S2CellId::initLookupCell(0, 0, 0, S2CellId::SWAP_MASK, 0, S2CellId::SWAP_MASK);
 S2CellId::initLookupCell(0, 0, 0, S2CellId::INVERT_MASK, 0, S2CellId::INVERT_MASK);
 S2CellId::initLookupCell(0, 0, 0, S2CellId::SWAP_MASK | S2CellId::INVERT_MASK, 0, S2CellId::SWAP_MASK | S2CellId::INVERT_MASK);
+
