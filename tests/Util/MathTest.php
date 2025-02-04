@@ -16,7 +16,7 @@ class MathTest extends TestCase {
         }
     }
 
-    public static function providerRemainderSimple() {
+    public static function providerRemainderSimple(): array {
         return [
                 [3, 2, -1],
                 [4, 2, 0],
@@ -49,7 +49,7 @@ class MathTest extends TestCase {
         }
     }
 
-    public static function providerRemainderIEEE() {
+    public static function providerRemainderIEEE(): array {
         return [
                 [31.34, 2.2, 0.5399999999999974],
                 [-21, 7, -0.],
