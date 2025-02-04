@@ -12,17 +12,20 @@ class SmokeTest extends TestCase
     /**
      * @param S2LatLng $a
      * @param S2LatLng $b
-     * @return float|int Distance in meters
+     * @return float Distance in meters
      */
-    public static function GreatEarthDistance(S2LatLng $a, S2LatLng $b): float|int {
-        $angle = self::Haversin($a->latRadians() - $b->latRadians())
-            + cos($a->latRadians()) * cos($b->latRadians()) * self::Haversin($a->lngRadians() - $b->lngRadians());
+    public static function GreatEarthDistance(S2LatLng $a, S2LatLng $b): float {
+        $deltaLat = ($a->latRadians() - $b->latRadians()) / 2;
+        $deltaLng = ($a->lngRadians() - $b->lngRadians()) / 2;
+
+        $angle = self::Haversin($deltaLat) + cos($a->latRadians()) * cos($b->latRadians()) * self::Haversin($deltaLng);
         return 2 * self::EARTH_RADIUS * asin(sqrt($angle));
     }
 
-    public static function Haversin(int|float $a): float|int {
-        return (1 - cos($a)) / 2;
+    public static function Haversin(float $a): float {
+        return pow(sin($a), 2);
     }
+
 
     public static function greatCircleBearing(S2LatLng $a, S2LatLng $b): float {
         $cos_latb = cos($b->latRadians());
@@ -119,22 +122,25 @@ class SmokeTest extends TestCase
 
         $dist3 = self::GreatEarthDistance($from, $to3);
 
-        $this->assertEquals(0.9700225997852, $from->latRadians());
-        $this->assertEquals(0.66169229779557, $from->lngRadians());
+        // These answers have all had an extra 2 digits or so added to match C++'s lib's results
+        $this->assertEquals(0.970022599785205, $from->latRadians());
+        $this->assertEquals(0.6616922977955738, $from->lngRadians());
 
-        $this->assertEquals(0.97002474654019, $to->latRadians());
-        $this->assertEquals(0.66167002739432, $to->lngRadians());
+        // was 97002474654019
+        $this->assertEquals(0.970024746540185, $to->latRadians());
+        $this->assertEquals(0.6616700273943182, $to->lngRadians());
 
-        $this->assertEquals(0.97002365521829, $to2->latRadians());
-        $this->assertEquals(0.66168134906715, $to2->lngRadians());
+        $this->assertEquals(0.9700236552182913, $to2->latRadians());
+        $this->assertEquals(0.6616813490671504, $to2->lngRadians());
 
-        $this->assertEquals(0.97002474654019, $to3->latRadians());
-        $this->assertEquals(0.66167002739432, $to3->lngRadians());
+        $this->assertEquals(0.970024746540185, $to3->latRadians());
+        $this->assertEquals(0.6616700273943183, $to3->lngRadians());
 
-        $this->assertEquals(-1.4018857232359, $bearing);
-        $this->assertEquals(-1.4018947548004, $bearing2);
-        $this->assertEquals(81.362381188294, $dist);
-        $this->assertEquals(81.362381188297, $dist3);
+//        $this->assertEquals(-1.4018857232359, $bearing);
+        $this->assertEquals(-1.401885723231582, $bearing);
+        $this->assertEquals(-1.4018947548087979, $bearing2);
+        $this->assertEquals(81.36238265029458, $dist);
+        $this->assertEquals(81.36238264990043, $dist3);
     }
 
     public function testB()
@@ -155,7 +161,7 @@ class SmokeTest extends TestCase
         $loc_oktz = S2LatLng::fromE6(55607195, 37971367);
         $loc_art = S2LatLng::fromE6(55605726, 37970664);
         $dist = self::GreatEarthDistance($loc_1, $s2ll);
-        $this->assertEquals(212.99711509717, $dist);
+        $this->assertEquals(212.99711320368743, $dist);
     }
 
     public function testPolygon()

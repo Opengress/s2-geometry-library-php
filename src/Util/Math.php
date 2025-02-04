@@ -1,12 +1,44 @@
 <?php
 declare(strict_types=1);
+
 namespace Util;
+
+use FFI;
+use Throwable;
 
 class Math {
     const TWO_1023 = 8.98846567431158e307; // Long bits 0x7fe0000000000000L.
+    private static ?FFI $ffi = null;
+
+    private static function loadFFI(): ?FFI {
+        try {
+            if (PHP_OS_FAMILY === 'Linux') {
+                $lib = "libm.so.6";
+            } elseif (PHP_OS_FAMILY === 'Darwin') {
+                $lib = "libm.dylib";
+            } elseif (PHP_OS_FAMILY === 'Windows') {
+                $lib = "msvcrt.dll";
+            } else {
+                return null;
+            }
+            return FFI::cdef("double remainder(double x, double y);", $lib);
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    private static function getFFI(): ?FFI {
+        if (self::$ffi === null) {
+            self::$ffi = self::loadFFI();
+        }
+        return self::$ffi;
+    }
 
     public static function remainderSimple(float $x, float $y): float {
-        if (is_nan($x) || is_nan($y) || $x===-INF || !($x < INF) || $y===0.) {
+        if ($ffi = self::getFFI()) {
+            return $ffi->remainder($x, $y);
+        }
+        if (is_nan($x) || is_nan($y) || $x === -INF || !($x < INF) || $y === 0.) {
             return NAN;
         }
 
@@ -29,16 +61,21 @@ class Math {
      * @see #rint(double)
      */
     public static function remainderIEEE(float $x, float $y): float {
+
+        if ($ffi = self::getFFI()) {
+            return $ffi->remainder($x, $y);
+        }
+
         // Purge off exception values.
-        if (is_nan($x) || $x===-INF || !($x < INF) || $y===0.) {
+        if (is_nan($x) || $x === -INF || !($x < INF) || $y === 0.) {
             return NAN;
         }
 
         $negative = $x < 0;
         $x = abs($x);
         $y = abs($y);
-        if ($x===$y || $x===0) {
-            return 0 * $x;
+        if ($x === $y || $x === 0) {
+            return 0.0 * $x;
         } // Get correct sign.
 
         // Achieve x < 2y, then take first shot at remainder.
@@ -63,6 +100,6 @@ class Math {
                 }
             }
         }
-        return $negative ? -$x:$x;
+        return $negative ? -$x : $x;
     }
 }

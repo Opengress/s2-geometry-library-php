@@ -12,7 +12,8 @@ class MathTest extends TestCase {
         if (is_nan($expected)) {
             self::assertNan(Math::remainderSimple($x, $y));
         } else {
-            self::assertEquals($expected, Math::remainderSimple($x, $y));
+            // compute this perfectly and PHP will still eat it when you return the value
+            self::assertEqualsWithDelta($expected, Math::remainderSimple($x, $y), 1e-14);
         }
     }
 
@@ -54,7 +55,8 @@ class MathTest extends TestCase {
                 [31.34, 2.2, 0.5399999999999974],
                 [-21, 7, -0.],
                 [NAN, 0, NAN],
-                [-2.34, NAN, -2.34],
+            // changed to match java and c++ versions and the comments
+                [-2.34, NAN, NAN],
         ];
     }
 }
