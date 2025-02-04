@@ -1,6 +1,8 @@
 <?php
 
-class SmokeTest extends PHPUnit_Framework_TestCase
+use PHPUnit\Framework\TestCase;
+
+class SmokeTest extends TestCase
 {
 
     const EARTH_RADIUS = 6371000;
