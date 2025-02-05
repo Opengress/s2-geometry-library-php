@@ -14,6 +14,11 @@ class S2 {
     const M_SQRT2 = M_SQRT2;
     const M_E = M_E;
 
+    /** The smallest floating-point value {@code x} such that {@code (1 + x != 1)}.
+     *  Note that this should actually be computed...
+     */
+    public const float DBL_EPSILON = 2.220446049250313e-16;
+
     // Together these flags define a cell orientation. If SWAP_MASK
     // is true, then canonical traversal order is flipped around the
     // diagonal (i.e. i and j are swapped with each other). If
@@ -144,6 +149,14 @@ class S2 {
      */
     public static function isUnitLength(S2Point $p) {
     	return abs($p->norm2() - 1) <= 1e-15;
+    }
+
+    /**
+     * Return true if two points are within the given distance in radians of each other. This is
+     * mainly useful for testing.
+     */
+    public static function approxEquals(S2Point $a, S2Point $b, float $maxErrorRadians): bool {
+        return $a->angle($b) <= $maxErrorRadians;
     }
 
     /**

@@ -125,6 +125,37 @@ class S2Point
         return ($axis == 0) ? $this->x : (($axis == 1) ? $this->y : $this->z);
     }
 
+    /**
+     * Returns the distance in 3D coordinates from this to that.
+     *
+     * <p>Equivalent to {@code a.sub(b).norm()}, but significantly faster.
+     *
+     * <p>If ordering points by angle, this is faster than {@link #norm}, and much faster than {@link
+     * #angle}, but consider using {@link S1ChordAngle}.
+     *
+     * <p>Returns the 3D Cartesian distance (also called the slant distance) between this and that,
+     * which are normal vectors on the surface of a unit sphere. If the S2Points represent points on
+     * Earth, use {@link S2Earth#getDistanceMeters(S2Point, S2Point)} to get distance in meters.
+     */
+    public function getDistance(S2Point $that): float {
+        return sqrt($this->getDistance2($that));
+    }
+
+    /**
+     * Returns the square of the distance in 3D coordinates from this to that.
+     *
+     * <p>Equivalent to {@code getDistance(that)<sup>2</sup>}, but significantly faster.
+     *
+     * <p>If ordering points by angle, this is much faster than {@link #angle}, but consider using
+     * {@link S1ChordAngle}.
+     */
+    public function getDistance2(S2Point $that): float {
+        $dx = $this->x - $that->x;
+        $dy = $this->y - $that->y;
+        $dz = $this->z - $that->z;
+        return $dx * $dx + $dy * $dy + $dz * $dz;
+    }
+
     /** Return the angle between two vectors in radians */
     public function angle(S2Point $va)
     {
@@ -180,8 +211,11 @@ class S2Point
         return "(" . $this->x . ", " . $this->y . ", " . $this->z . ")";
     }
 
-    public function toDegreesString()
-    {
+    public function __toString() {
+        return $this->toString();
+    }
+
+    public function toDegreesString() {
         $s2LatLng = new S2LatLng($this);
         return "(" . $s2LatLng->latDegrees() . ", "
         . $s2LatLng->lngDegrees() . ")";

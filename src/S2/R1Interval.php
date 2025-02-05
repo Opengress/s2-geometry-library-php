@@ -8,7 +8,7 @@ class R1Interval
     private $hi;
 
     /** Interval constructor. If lo > hi, the interval is empty. */
-    public function __construct($lo, $hi)
+    public function __construct($lo = 1, $hi = 0)
     {
         $this->lo = $lo;
         $this->hi = $hi;
@@ -19,6 +19,15 @@ class R1Interval
      * empty.)
      */
     public static function emptya()
+    {
+        return self::empty();
+    }
+
+    /**
+     * Returns an empty interval. (Any interval where lo > hi is considered
+     * empty.)
+     */
+    public static function empty()
     {
         return new R1Interval(1, 0);
     }
@@ -135,7 +144,7 @@ class R1Interval
     /** Expand the interval so that it contains the given point "p". */
     public function addPoint($p)
     {
-        if (isEmpty()) {
+        if (self::isEmpty()) {
             return R1Interval::fromPoint($p);
         } else if ($p < $this->lo()) {
             return new R1Interval($p, $this->hi());
@@ -174,6 +183,31 @@ class R1Interval
         }
         return new R1Interval(min($this->lo(), $y->lo()), max($this->hi(), $y->hi()));
     }
+
+    /**
+     * Expands this interval so that it contains the point {@code p}.
+     *
+     * <p>Package private since only the S2 library needs to mutate R1Intervals.
+     */
+    function unionInternal(float $p): void {
+        if ($this->isEmpty()) {
+            $this->lo = $p;
+            $this->hi = $p;
+        } else if ($p < $this->lo) {
+            $this->lo = $p;
+        } else if ($p > $this->hi) {
+            $this->hi = $p;
+        }
+    }
+
+    /**
+     * Returns the closest point in the interval to the point {@code p}. The interval must be
+     * non-empty.
+     */
+    public function clampPoint(float $p): float {
+    // assert (!isEmpty());
+    return max($this->lo, min($this->hi, $p));
+  }
 
     /**
      * Return the intersection of this interval with the given interval. Empty

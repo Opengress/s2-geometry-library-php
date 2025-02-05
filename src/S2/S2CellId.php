@@ -191,11 +191,12 @@ class S2CellId {
         return $this->id;
     }
 
-    /** Return true if id() represents a valid cell. *#/
-     * public boolean isValid() {
-     * return face() < NUM_FACES && ((lowestOnBit() & (0x1555555555555555L)) != 0);
-     * }
-     * /** Which cube face this cell belongs to, in the range 0..5. */
+    /** Return true if id() represents a valid cell. */
+      public function isValid(): bool {
+      return $this->face() < $this->NUM_FACES && (($this->lowestOnBit() & gmp_init('0x1555555555555555')) != 0);
+      }
+
+    /** Which cube face this cell belongs to, in the range 0..5. */
     public function face()
     {
         return $this->id >> self::POS_BITS & PHP_INT_MAX >> (self::POS_BITS - 1);

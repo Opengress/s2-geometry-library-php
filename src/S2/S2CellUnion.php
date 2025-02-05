@@ -63,12 +63,7 @@ class S2CellUnion
         return count($this->cellIds);
     }
 
-    /** Convenience methods for accessing the individual cell ids. *#/
-     * public S2CellId cellId(int i) {
-     * return cellIds.get(i);
-     * }
-     *
-     * /** Enable iteration over the union's cells. *#/
+    /** Enable iteration over the union's cells. *#/
      * @Override
      * public Iterator<S2CellId> iterator() {
      * return cellIds.iterator();
@@ -119,17 +114,6 @@ class S2CellUnion
     }
 
     /**
-     * If there are more than "excess" elements of the cell_ids() vector that are
-     * allocated but unused, reallocate the array to eliminate the excess space.
-     * This reduces memory usage when many cell unions need to be held in memory
-     * at once.
-     *#/
-     * public void pack() {
-     * cellIds.trimToSize();
-     * }
-     *
-     *
-     * /**
      * Return true if the cell union contains the given cell id. Containment is
      * defined with respect to regions, e.g. a cell contains its 4 children. This
      * is a fast operation (logarithmic in the size of the cell union).
@@ -157,41 +141,38 @@ class S2CellUnion
      * /**
      * Return true if the cell union intersects the given cell id. This is a fast
      * operation (logarithmic in the size of the cell union).
-     *#/
-     * public boolean intersects(S2CellId id) {
-     * // This function requires that Normalize has been called first.
-     * // This is an exact test; see the comments for Contains() above.
-     * int pos = Collections.binarySearch(cellIds, id);
-     *
-     * if (pos < 0) {
-     * pos = -pos - 1;
-     * }
-     *
-     *
-     * if (pos < cellIds.size() && cellIds.get(pos).rangeMin().lessOrEquals(id.rangeMax())) {
-     * return true;
-     * }
-     * return pos != 0 && cellIds.get(pos - 1).rangeMax().greaterOrEquals(id.rangeMin());
-     * }
-     *
-     * public boolean contains(S2CellUnion that) {
-     * // TODO(kirilll?): A divide-and-conquer or alternating-skip-search approach
-     * // may be significantly faster in both the average and worst case.
-     * for (S2CellId id : that) {
-     * if (!this.contains(id)) {
-     * return false;
-     * }
-     * }
-     * return true;
-     * }
-     *
-     * /** This is a fast operation (logarithmic in the size of the cell union). *#/
-     * @Override
-     * public boolean contains(S2Cell cell) {
-     * return contains(cell.id());
-     * }
-     *
-     * /**
+     */
+    public function intersects(S2CellId $id): bool {
+        // This function requires that Normalize has been called first.
+        // This is an exact test; see the comments for Contains() above.
+        $pos = Collections::binarySearch($this->cellIds, $id);
+
+        if ($pos < 0) {
+            $pos = -$pos - 1;
+        }
+
+        if ($pos < count($this->cellIds) && $this->cellIds[$pos]->rangeMin()->lessOrEquals($id->rangeMax())) {
+            return true;
+        }
+        return $pos != 0 && $this->cellIds[$pos - 1]->rangeMax()->greaterOrEquals($id->rangeMin());
+    }
+
+    public function contains(S2CellUnion|S2Cell|S2CellId $that): bool {
+        if ($that instanceof S2Cell || $that instanceof S2CellId) {
+            // This is a fast operation (logarithmic in the size of the cell union).
+            return $this->contains($that->id());
+        }
+        // TODO(kirilll?): A divide-and-conquer or alternating-skip-search approach
+        //  may be significantly faster in both the average and worst case.
+        foreach ($that as $id) {
+            if (!$this->contains($id)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
      * Return true if this cell union contain/intersects the given other cell
      * union.
      *#/

@@ -3,11 +3,13 @@
     "description": "Fork - Port of s2-geometry-library-java into PHP",
     "type": "library",
     "require-dev": {
-        "phpunit/phpunit": "^11"
+        "phpunit/phpunit": "^11",
+        "ext-gmp": "*"
     },
     "autoload": {
         "psr-4": {
-            "": "src/"
+            "": "src/",
+            "Tests\\": "tests/"
         }
     },
     "require": {
